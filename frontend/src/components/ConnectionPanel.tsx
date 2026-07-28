@@ -6,14 +6,12 @@ import type { ServerStatus } from "../hooks/useServerHealth";
 interface ConnectionPanelProps {
   status: ServerStatus;
   onRefresh: () => void;
-  uiLang: "ar" | "en";
 }
 
-export function ConnectionPanel({ status, onRefresh, uiLang }: ConnectionPanelProps) {
+export function ConnectionPanel({ status, onRefresh }: ConnectionPanelProps) {
   const [diagRun, setDiagRun] = useState(false);
   const online = status === "online";
   const checking = status === "checking";
-  const isAr = uiLang === "ar";
 
   return (
     <aside className="panel connection-panel connection-panel-compact">
@@ -24,40 +22,25 @@ export function ConnectionPanel({ status, onRefresh, uiLang }: ConnectionPanelPr
             aria-hidden
           />
           <span className="backend-status-text">
-            {checking
-              ? isAr
-                ? "جاري الفحص…"
-                : "Checking…"
-              : online
-                ? isAr
-                  ? "الخادم متصل"
-                  : "Server online"
-                : isAr
-                  ? "الخادم متوقف"
-                  : "Server offline"}
+            {checking ? "Checking…" : online ? "Connected" : "Offline"}
           </span>
         </div>
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onRefresh}
-          title={isAr ? "تحديث الاتصال" : "Refresh connection"}
-        >
+        <button type="button" className="icon-btn" onClick={onRefresh} title="Refresh connection">
           {checking ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
         </button>
       </div>
 
       {!online && !checking && (
-        <div className="deploy-note">
+        <div className="deploy-note" style={{ marginTop: "0.75rem" }}>
           <button
             type="button"
             className="btn ghost small"
             onClick={() => setDiagRun(true)}
             disabled={diagRun}
           >
-            {isAr ? "تشخيص الاتصال" : "Run diagnostic"}
+            Run diagnostic
           </button>
-          <ConnectionDiagnostic run={diagRun} uiLang={uiLang} />
+          <ConnectionDiagnostic run={diagRun} />
         </div>
       )}
     </aside>

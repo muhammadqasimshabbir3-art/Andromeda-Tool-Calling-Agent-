@@ -1,7 +1,7 @@
 [project]
-name = "arabic-ocr-rag-agent"
-version = "0.2.0"
-description = "Arabic Document Intelligence Agent: OCR, embeddings, and grounded RAG with citations."
+name = "andromeda-agent"
+version = "0.1.0"
+description = "Multi-tool LangGraph agent with calculator, web search, file search, PDF, and email."
 authors = [
     { name = "Muhammad Qasim Shabbir", email = "muhammadqasimshabbir3@gmail.com" },
 ]
@@ -14,85 +14,65 @@ dependencies = [
     "langchain>=0.1.0",
     "langchain-groq>=0.1.0",
     "langchain-community>=0.1.0",
+    "duckduckgo-search>=6.0.0",
     "requests>=2.31.0",
+    "reportlab>=4.0.0",
+    "beautifulsoup4>=4.12.0",
+    "sympy>=1.12",
     "streamlit>=1.28.0",
+    "ddgs>=9.0.0",
     "langgraph-api==0.10.0",
+    "google-api-python-client>=2.86.0",
+    "google-auth>=2.20.0",
+    "google-auth-oauthlib>=1.0.0",
+    "ipython>=9.15.0",
     "pypdf>=4.3.0",
     "chromadb>=0.5.0",
+    "psycopg[binary]>=3.2.0",
     "sentence-transformers>=3.0.0",
     "torch>=2.2.0",
-    "transformers>=4.45.0",
-    "accelerate>=0.33.0",
-    "qwen-vl-utils>=0.0.8",
-    "Pillow>=10.0.0",
-    "pymupdf>=1.24.0",
-    "numpy>=1.26.0",
-    "faiss-cpu>=1.8.0",
-    "qdrant-client>=1.9.0",
-    "python-docx>=1.2.0",
-    "duckduckgo-search>=6.0.0",
+    "sqlglot>=25.0.0",
 ]
 
+
 [project.optional-dependencies]
-dev = [
-    "mypy>=1.11.1",
-    "ruff>=0.6.1",
+dev = ["mypy>=1.11.1",
+       "ruff>=0.6.1",
     "langgraph-cli[inmem]>=0.4.14",
 ]
 ui = ["streamlit>=1.28.0"]
-openai = ["langchain-openai>=0.1.0"]
-gemini = ["langchain-google-genai>=2.0.0"]
-faiss = ["faiss-cpu>=1.8.0"]
-qdrant = ["qdrant-client>=1.9.0"]
-
 
 [build-system]
 requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = [
-    "agent*",
-    "config*",
-    "state*",
-    "routing*",
-    "loaders*",
-    "ocr*",
-    "preprocess*",
-    "chunking*",
-    "embeddings*",
-    "vectorstore*",
-    "retriever*",
-    "reranker*",
-    "llm*",
-    "prompts*",
-    "utils*",
-    "tools*",
-]
-
+[tool.setuptools]
+packages = ["langgraph.templates.agent", "agent"]
 [tool.setuptools.package-dir]
-"" = "src"
 "langgraph.templates.agent" = "src/agent"
+"agent" = "src/agent"
+
 
 [tool.setuptools.package-data]
-"agent" = ["py.typed"]
+"agent" = ["py.typed", "data/*"]
 "*" = ["py.typed"]
 
 [tool.ruff]
 lint.select = [
-    "E",
-    "F",
-    "I",
-    "D",
-    "D401",
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
     "T201",
     "UP",
 ]
 lint.ignore = [
     "UP006",
     "UP007",
+    # We actually do want to import from typing_extensions
     "UP035",
+    # Relax the convention by _not_ requiring documentation for every function parameter.
     "D417",
     "E501",
 ]
@@ -104,7 +84,7 @@ convention = "google"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 markers = [
-    "integration: tests that call live services (Groq/OCR/etc.)",
+    "integration: tests that call live services (Groq/Neon/etc.)",
     "langsmith: optional LangSmith-traced integration tests",
 ]
 

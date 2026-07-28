@@ -1,5 +1,13 @@
 import type { AgentRunSettings } from "../types";
 
+function envBool(key: string, fallback: boolean): boolean {
+  const raw = import.meta.env[key];
+  if (raw == null || String(raw).trim() === "") return fallback;
+  const value = String(raw).trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(value);
+}
+
+
 function envStr(key: string, fallback: string): string {
   const raw = import.meta.env[key];
   return raw != null && String(raw).trim() !== "" ? String(raw).trim() : fallback;
@@ -7,15 +15,13 @@ function envStr(key: string, fallback: string): string {
 
 export function defaultRunSettings(): AgentRunSettings {
   return {
-    user_input: envStr("VITE_DEFAULT_USER_INPUT", "ما موضوع هذا المستند؟"),
+    user_input: envStr("VITE_DEFAULT_USER_INPUT", "What is log(1000) + sin(30)?"),
+    web_search_enabled: envBool("VITE_DEFAULT_WEB_SEARCH", false),
+    user_latitude: 0,
+    user_longitude: 0,
     pdf_analysis_enabled: false,
     pdf_data_base64: "",
     pdf_filename: "",
     pdf_summarize_only: false,
-    document_data_base64: "",
-    document_filename: "",
-    document_mime_type: "",
-    summarize_only: false,
-    response_language: "ar",
   };
 }

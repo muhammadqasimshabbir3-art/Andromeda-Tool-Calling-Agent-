@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shared helpers for starting/stopping Arabic Document Intelligence services.
+# Shared helpers for starting/stopping Andromeda agent services.
 
 LANGGRAPH_PORT="${LANGGRAPH_PORT:-2024}"
 STREAMLIT_PORT="${STREAMLIT_PORT:-8501}"

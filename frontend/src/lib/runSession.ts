@@ -1,8 +1,7 @@
 /** Persist active LangGraph run so a browser refresh can reconnect. */
 import type { AgentState, StepState } from "../types";
 
-const STORAGE_KEY = "wathiqa-run-session";
-const MEMORY_KEY = "wathiqa-session-memory";
+const STORAGE_KEY = "andromeda-run-session";
 
 export interface RunSession {
   threadId: string;
@@ -13,8 +12,6 @@ export interface RunSession {
   partialState?: AgentState;
   reconnected?: boolean;
 }
-
-export type MemoryMessage = { type: "human" | "ai"; content: string };
 
 function readStorage(): RunSession | null {
   for (const store of [sessionStorage, localStorage]) {
@@ -62,33 +59,5 @@ export function clearRunSession(): void {
     } catch {
       // ignore
     }
-  }
-}
-
-/** Short hidden chat memory for the agent (not shown in Answer UI). */
-export function loadSessionMemory(): MemoryMessage[] {
-  try {
-    const raw = sessionStorage.getItem(MEMORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as MemoryMessage[];
-    return Array.isArray(parsed) ? parsed.filter((m) => m?.content && (m.type === "human" || m.type === "ai")) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveSessionMemory(messages: MemoryMessage[]): void {
-  try {
-    sessionStorage.setItem(MEMORY_KEY, JSON.stringify(messages));
-  } catch {
-    // ignore
-  }
-}
-
-export function clearSessionMemory(): void {
-  try {
-    sessionStorage.removeItem(MEMORY_KEY);
-  } catch {
-    // ignore
   }
 }

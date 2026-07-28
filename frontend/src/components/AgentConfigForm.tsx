@@ -1,339 +1,189 @@
-import { FileUp, Play, RotateCcw, Square, X } from "lucide-react";
+import { Download, FileUp, Play, RotateCcw, Square } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { IS_PRODUCTION, LANGGRAPH_API_URL, USES_DEV_PROXY } from "../config";
-import type { AgentRunSettings, StepState } from "../types";
+import { generatedPdfFromResult } from "../lib/generatedPdf";
+import type { AgentRunSettings, AgentState } from "../types";
 
 interface AgentConfigFormProps {
   settings: AgentRunSettings;
   onChange: <K extends keyof AgentRunSettings>(key: K, value: AgentRunSettings[K]) => void;
+  disabled?: boolean;
   running: boolean;
-  steps?: StepState[];
   serverOnline: boolean;
   onStart: () => void;
   onStop: () => void;
   onReset: () => void;
-  onClearAnswer: () => void;
-  /** Auto-run summarize after upload — no user summary prompt needed. */
-  onAutoSummarize: (overrides: Partial<AgentRunSettings>) => void;
   canReset?: boolean;
-  answer: string;
+  result: AgentState | null;
   error: string | null;
-  uiLang: "ar" | "en";
 }
 
-const ACCEPTED = [
-  "application/pdf",
-  ".pdf",
-  "image/jpeg",
-  ".jpg",
-  ".jpeg",
-  "image/png",
-  ".png",
-  "image/tiff",
-  ".tif",
-  ".tiff",
-  "image/bmp",
-  ".bmp",
-  "image/webp",
-  ".webp",
-  "image/gif",
-  ".gif",
-  "text/plain",
-  ".txt",
-  "text/markdown",
-  ".md",
-  ".markdown",
-  "text/csv",
-  ".csv",
-  ".tsv",
-  ".log",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".docx",
-].join(",");
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="toggle-row">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+      />
+      <span>
+        <strong>{label}</strong>
+        {hint && <small>{hint}</small>}
+      </span>
+    </label>
+  );
+}
+
+function messageContent(msg: { content?: unknown }): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && "text" in part) {
+          return String((part as { text?: string }).text ?? "");
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  return msg.content != null ? String(msg.content) : "";
+}
+
+function extractAnswer(result: AgentState | null): string {
+  if (!result) return "";
+  const messages = result.messages ?? [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    const type = (msg.type ?? "").toLowerCase();
+    if (type === "ai" || type === "aimessage" || type.includes("ai")) {
+      const text = messageContent(msg).trim();
+      if (text) return text;
+    }
+  }
+  return (result.task_plan_summary ?? "").trim();
+}
 
 export function AgentConfigForm({
   settings,
   onChange,
+  disabled,
   running,
-  steps = [],
   serverOnline,
   onStart,
   onStop,
   onReset,
-  onClearAnswer,
-  onAutoSummarize,
   canReset = true,
-  answer,
+  result,
   error,
-  uiLang,
 }: AgentConfigFormProps) {
-  const isAr = uiLang === "ar";
-  const filename = settings.pdf_filename || settings.document_filename || "";
-  const responseLang = settings.response_language === "en" ? "en" : "ar";
-  const activeStep = steps.find((s) => s.status === "running");
-  const pdfMode = Boolean(filename);
-  // Once the answer is on screen, leave "busy" UI even if the run flag lags.
-  const busy = running && !answer;
-  const isDocBusy =
-    busy &&
-    pdfMode &&
-    (Boolean(settings.summarize_only || settings.pdf_summarize_only) ||
-      activeStep?.id === "ingest_document" ||
-      activeStep?.id === "summarize_document" ||
-      activeStep?.id === "prepare_input" ||
-      activeStep?.id === "decision_agent");
-  const isGenerating =
-    busy &&
-    (activeStep?.id === "query_documents" ||
-      activeStep?.id === "query_knowledge_base" ||
-      activeStep?.id === "query_planner" ||
-      activeStep?.id === "web_search" ||
-      activeStep?.id === "summarize_document" ||
-      activeStep?.id === "call_model");
+  const answer = extractAnswer(result);
+  const generatedPdf = generatedPdfFromResult(result);
+  const isReadOnlyBlock =
+    result?.agent_route === "reject_db_mutation" ||
+    answer.includes("Database write blocked") ||
+    answer.includes("Database mutation blocked") ||
+    answer.includes("read-only access only");
 
-  const canType = serverOnline;
-  const canSend = Boolean(serverOnline && settings.user_input.trim()) && !busy;
+  const readPdfFile = (file: File) => {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      onChange("pdf_data_base64", "");
+      onChange("pdf_filename", "");
+      onChange("pdf_analysis_enabled", false);
+      return;
+    }
 
-  const copy = {
-    uploadBig: isAr ? "① ارفع الملف هنا" : "① Drop your file here",
-    uploadClick: isAr ? "أو انقر للاختيار" : "or click to choose",
-    uploadHint: isAr
-      ? "PDF · صور · TXT · DOCX — يُلخَّص تلقائيًا بعد الرفع"
-      : "PDF · images · TXT · DOCX — auto-summarizes on upload",
-    askBig: isAr ? "② اكتب سؤالك" : "② Type your question",
-    askHintPdf: isAr
-      ? "اسأل عن الملف المرفوع بعد اكتمال الفهرسة"
-      : "Ask about the uploaded file after indexing finishes",
-    askHintKb: isAr
-      ? "بدون ملف: يبحث في قاعدة المعرفة (BM25 + متجهات)"
-      : "No file: searches the knowledge DB (BM25 + vectors)",
-    answerLang: isAr ? "لغة الإجابة" : "Answer language",
-    placeholder: isAr
-      ? pdfMode
-        ? "اكتب سؤالك عن المستند…"
-        : "اكتب سؤالك هنا…"
-      : pdfMode
-        ? "Ask a question about the document…"
-        : "Type your question here…",
-    modePdf: isAr ? "وضع المستند" : "Document mode",
-    modeKb: isAr ? "وضع قاعدة المعرفة" : "Knowledge mode",
-    send: isAr ? "اسأل الآن" : "Ask now",
-    sendWait: isAr ? "جاري العمل…" : "Working…",
-    stop: isAr ? "إيقاف" : "Stop",
-    reset: isAr ? "مسح" : "Clear",
-    clear: isAr ? "إزالة" : "Remove",
-    ready: isAr ? "جاري المعالجة" : "Processing",
-    readyIdle: isAr ? "تم الرفع — اسأل هنا" : "Uploaded — ask here",
-    answer: isAr ? "③ الإجابة" : "③ Answer",
-    answerEmpty: isAr
-      ? "الإجابة تظهر هنا بجانب السؤال"
-      : "Answer appears here beside the question",
-    error: isAr ? "حدث خطأ" : "Something went wrong",
-    offline: isAr
-      ? "الخادم غير متصل. شغّل ./start.sh both"
-      : "Backend offline. Run ./start.sh both",
-    indexing: isAr ? "جاري الفهرسة…" : "Indexing…",
-    generating: isAr ? "جاري إنشاء الإجابة…" : "Generating answer…",
-    working: isAr ? "جاري العمل…" : "Working…",
-  };
-
-  const readDocumentFile = (file: File) => {
-    if (busy || !serverOnline) return;
     const reader = new FileReader();
     reader.onload = () => {
       const data = typeof reader.result === "string" ? reader.result : "";
       const base64 = data.includes(",") ? data.split(",")[1] : data;
-      onAutoSummarize({
-        pdf_data_base64: base64,
-        pdf_filename: file.name,
-        document_data_base64: base64,
-        document_filename: file.name,
-        document_mime_type: file.type || "",
-        pdf_analysis_enabled: true,
-        pdf_summarize_only: true,
-        summarize_only: true,
-      });
+      onChange("pdf_data_base64", base64);
+      onChange("pdf_filename", file.name);
+      onChange("pdf_analysis_enabled", true);
+      onChange("pdf_summarize_only", true);
+      onChange("user_input", `Summarize the uploaded PDF named ${file.name}.`);
     };
     reader.readAsDataURL(file);
   };
 
-  const clearDocument = () => {
+  const clearPdf = () => {
     onChange("pdf_data_base64", "");
     onChange("pdf_filename", "");
-    onChange("document_data_base64", "");
-    onChange("document_filename", "");
-    onChange("document_mime_type", "");
     onChange("pdf_analysis_enabled", false);
     onChange("pdf_summarize_only", false);
-    onChange("summarize_only", false);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (canSend) onStart();
+      if (!running && serverOnline && settings.user_input.trim()) onStart();
     }
   };
 
   return (
-    <section className="action-desk">
-      <div className="action-grid with-answer">
-        <div className={`action-card upload-card${filename ? " has-file" : ""}${isDocBusy ? " is-busy" : ""}`}>
-          <div className={`upload-zone giant${filename ? " has-file" : ""}`}>
-            <FileUp className="upload-icon" size={42} strokeWidth={1.75} />
-            <strong className="upload-big-label">{copy.uploadBig}</strong>
-            <span className="upload-click">{copy.uploadClick}</span>
-            <small>{copy.uploadHint}</small>
-            <input
-              type="file"
-              accept={ACCEPTED}
-              disabled={busy || !serverOnline}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) readDocumentFile(file);
-                e.target.value = "";
-              }}
-              aria-label={copy.uploadBig}
-            />
-          </div>
-          {filename && (
-            <div className="file-chip">
-              <div>
-                <strong>{filename}</strong>
-                <small>
-                  {busy
-                    ? copy.ready
-                    : answer
-                      ? isAr
-                        ? "مكتمل — اسأل هنا"
-                        : "Done — ask here"
-                      : copy.readyIdle}
-                </small>
-              </div>
-              <button
-                type="button"
-                className="btn small ghost"
-                disabled={busy}
-                onClick={clearDocument}
-              >
-                <X size={14} />
-                {copy.clear}
-              </button>
-            </div>
-          )}
-        </div>
+    <section className="panel">
+      <div className="panel-title">
+        <span>Ask Andromeda</span>
+      </div>
+      <p className="panel-desc">
+        Calculate, search the web, analyze a PDF, find files, check location, or run a multi-step
+        workflow.
+      </p>
 
-        <div className="action-card ask-card">
-          <div className="answer-lang-row">
-            <span className="answer-lang-label">{copy.answerLang}</span>
-            <div className="answer-lang-toggle" role="group" aria-label={copy.answerLang}>
-              <button
-                type="button"
-                className={responseLang === "ar" ? "active" : ""}
-                disabled={busy}
-                onClick={() => onChange("response_language", "ar")}
-              >
-                العربية
-              </button>
-              <button
-                type="button"
-                className={responseLang === "en" ? "active" : ""}
-                disabled={busy}
-                onClick={() => onChange("response_language", "en")}
-              >
-                English
-              </button>
-            </div>
-          </div>
-          <label className="ask-label" htmlFor="wathiqa-question">
-            {copy.askBig}
-          </label>
-          <div className={`mode-pill ${pdfMode ? "pdf" : "kb"}`}>
-            {pdfMode ? copy.modePdf : copy.modeKb}
-          </div>
-          <p className="ask-mode-hint">{pdfMode ? copy.askHintPdf : copy.askHintKb}</p>
-          <textarea
-            id="wathiqa-question"
-            className="composer-input giant"
-            value={settings.user_input}
-            onChange={(e) => {
-              onChange("user_input", e.target.value);
-              if (!busy) {
-                if (answer) onClearAnswer();
-                onChange("pdf_summarize_only", false);
-                onChange("summarize_only", false);
-              }
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={copy.placeholder}
-            disabled={!canType}
-            rows={5}
-            dir="auto"
-          />
-          <div className="composer-actions sticky-actions">
-            {!busy ? (
-              <button
-                type="button"
-                className="btn primary giant-btn"
-                disabled={!canSend}
-                onClick={onStart}
-              >
-                <Play size={20} />
-                {copy.send}
-              </button>
-            ) : (
-              <>
-                <button type="button" className="btn primary giant-btn" disabled>
-                  <Play size={20} />
-                  {copy.sendWait}
-                </button>
-                <button type="button" className="btn danger giant-btn" onClick={onStop}>
-                  <Square size={18} />
-                  {copy.stop}
-                </button>
-              </>
-            )}
+      <div className="composer">
+        <textarea
+          className="composer-input"
+          value={settings.user_input}
+          onChange={(e) => {
+            onChange("user_input", e.target.value);
+            onChange("pdf_summarize_only", false);
+          }}
+          onKeyDown={onKeyDown}
+          placeholder="Type your message… (Enter to send, Shift+Enter for new line)"
+          disabled={disabled}
+          rows={3}
+        />
+        <div className="composer-actions">
+          {!running ? (
             <button
               type="button"
-              className="btn ghost"
-              onClick={onReset}
-              disabled={busy || !canReset}
+              className="btn primary"
+              disabled={!serverOnline || !settings.user_input.trim()}
+              onClick={onStart}
             >
-              <RotateCcw size={16} />
-              {copy.reset}
+              <Play size={16} />
+              Send
             </button>
-          </div>
-        </div>
-
-        <div
-          className={`action-card answer-card${error ? " has-error" : ""}${answer ? " has-answer" : ""}`}
-        >
-          <strong className="answer-label">{error ? copy.error : copy.answer}</strong>
-          {busy && !answer && !error && (
-            <div
-              className={`inline-progress compact${isDocBusy ? " scanning" : ""}${isGenerating ? " generating" : ""}`}
-              role="status"
-              aria-live="polite"
-            >
-              <div className="inline-progress-label">
-                <strong>
-                  {isDocBusy ? copy.indexing : isGenerating ? copy.generating : copy.working}
-                </strong>
-              </div>
-              <div className="inline-progress-track">
-                <div className="inline-progress-fill" />
-              </div>
-            </div>
-          )}
-          {error ? (
-            <p className="answer-body error-text">{error}</p>
-          ) : answer ? (
-            <div className="answer-body" dir="auto">
-              {answer}
-            </div>
           ) : (
-            !busy && <p className="answer-placeholder">{copy.answerEmpty}</p>
+            <button type="button" className="btn danger" onClick={onStop}>
+              <Square size={16} />
+              Stop
+            </button>
           )}
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={onReset}
+            disabled={running || !canReset}
+            title="Clear conversation"
+          >
+            <RotateCcw size={16} />
+            Reset
+          </button>
         </div>
       </div>
 
@@ -341,14 +191,109 @@ export function AgentConfigForm({
         <p className="hint warn">
           {IS_PRODUCTION || !USES_DEV_PROXY ? (
             <>
-              {isAr ? "الخادم غير متاح على" : "Backend unreachable at"}{" "}
-              <code>{LANGGRAPH_API_URL}</code>
+              LangGraph backend is unreachable at <code>{LANGGRAPH_API_URL}</code>.
             </>
           ) : (
-            copy.offline
+            <>
+              Start the LangGraph server first: <code>./start.sh both</code>
+            </>
           )}
         </p>
       )}
+      {running && (
+        <p className="hint running-hint">Working… watch the pipeline on the right for progress.</p>
+      )}
+
+      {error && (
+        <div className="answer-box answer-error">
+          <strong>Error</strong>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {!error && answer && (
+        <div
+          className={`answer-box${isReadOnlyBlock ? " answer-warning" : ""}`}
+          role={isReadOnlyBlock ? "alert" : undefined}
+        >
+          <strong>{isReadOnlyBlock ? "Not allowed — read-only" : "Answer"}</strong>
+          <div className="answer-body">{answer}</div>
+        </div>
+      )}
+
+      <h3 className="form-section-title">PDF analysis</h3>
+      <div className="pdf-upload-row">
+        <label>
+          <span>Upload PDF</span>
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            disabled={disabled}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) readPdfFile(file);
+            }}
+          />
+        </label>
+        {settings.pdf_filename ? (
+          <div className="pdf-file-status">
+            <strong>
+              <FileUp size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
+              {settings.pdf_filename}
+            </strong>
+            <small>PDF mode stays active for follow-up questions this session.</small>
+            <button type="button" className="btn small ghost" disabled={disabled} onClick={clearPdf}>
+              Clear PDF
+            </button>
+          </div>
+        ) : generatedPdf ? (
+          <div className="pdf-file-status">
+            <strong>
+              <Download size={14} style={{ marginRight: 6, verticalAlign: "middle" }} />
+              {generatedPdf.filename}
+            </strong>
+            <small>Generated by Andromeda for your request — download it here.</small>
+            <a
+              className="btn small primary"
+              href={generatedPdf.downloadUrl}
+              download={generatedPdf.filename}
+            >
+              <Download size={14} />
+              Download PDF
+            </a>
+          </div>
+        ) : (
+          <div className="pdf-file-status">
+            <strong>Andromeda sample PDF</strong>
+            <small>Download a sample, or ask the agent to generate a report PDF.</small>
+            <a className="btn small primary" href="/andromeda-agent.pdf" download="andromeda-agent.pdf">
+              <Download size={14} />
+              Download sample
+            </a>
+          </div>
+        )}
+      </div>
+
+      <h3 className="form-section-title">Capabilities</h3>
+      <div className="toggle-grid">
+        <ToggleRow
+          label="Enable web search"
+          hint="Let the agent use DuckDuckGo for recent information."
+          checked={settings.web_search_enabled}
+          onChange={(v) => onChange("web_search_enabled", v)}
+          disabled={disabled}
+        />
+        <ToggleRow
+          label="Ask uploaded PDF"
+          hint="Answer only from the uploaded PDF using RAG retrieval."
+          checked={Boolean(settings.pdf_analysis_enabled && settings.pdf_data_base64)}
+          onChange={(v) => {
+            onChange("pdf_analysis_enabled", v);
+            if (!v) onChange("pdf_summarize_only", false);
+          }}
+          disabled={disabled || !settings.pdf_data_base64}
+        />
+      </div>
     </section>
   );
 }

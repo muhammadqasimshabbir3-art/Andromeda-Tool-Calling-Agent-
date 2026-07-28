@@ -195,10 +195,6 @@ export function progressPercent(steps: StepState[]): number {
     const state = steps.find((s) => s.id === def.id);
     return state?.status === "completed" || state?.status === "skipped";
   }).length;
-  const stillRunning = steps.some((s) => s.status === "running");
-  const running = stillRunning ? 0.5 : 0;
-  const raw = Math.round(((completed + running) / total) * 100);
-  // While a node is active, never report 100% (optional-step flicker used to spike to 100).
-  if (stillRunning) return Math.min(99, raw);
-  return Math.min(100, raw);
+  const running = steps.some((s) => s.status === "running") ? 0.5 : 0;
+  return Math.min(100, Math.round(((completed + running) / total) * 100));
 }

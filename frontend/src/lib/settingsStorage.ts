@@ -1,8 +1,8 @@
 import type { AgentRunSettings } from "../types";
 import { defaultRunSettings } from "./defaultSettings";
 
-const STORAGE_KEY = "wathiqa-ui-run-settings";
-const LEGACY_STORAGE_KEY = "arabic-doc-agent-run-settings";
+const STORAGE_KEY = "andromeda-agent-run-settings";
+const LEGACY_STORAGE_KEY = "yt-agent-run-settings";
 
 export function loadRunSettings(): AgentRunSettings {
   const defaults = defaultRunSettings();
@@ -21,17 +21,15 @@ export function loadRunSettings(): AgentRunSettings {
 }
 
 export function saveRunSettings(settings: AgentRunSettings): void {
-  // Document payloads can be large; keep them in React state for follow-up
-  // questions during the current session instead of persisting to storage.
-  const {
-    pdf_data_base64: _pdfData,
-    document_data_base64: _docData,
-    ...storedSettings
-  } = settings;
+  // PDF payloads can be large; keep them in React state for follow-up questions
+  // during the current session instead of persisting them to browser storage.
+  const { pdf_data_base64: _pdfData, ...storedSettings } = settings;
   const raw = JSON.stringify(storedSettings);
   try {
     localStorage.setItem(STORAGE_KEY, raw);
     sessionStorage.setItem(STORAGE_KEY, raw);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    sessionStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     // ignore quota / private mode
   }

@@ -11,11 +11,8 @@ import {
 } from "../lib/agentClient";
 import {
   clearRunSession,
-  clearSessionMemory,
   loadRunSession,
-  loadSessionMemory,
   saveRunSession,
-  saveSessionMemory,
 } from "../lib/runSession";
 import {
   buildPipelineFromState,
@@ -40,23 +37,45 @@ import {
 import type { AgentState, LogEntry, RunRequest, StepState } from "../types";
 
 const POLL_MS = 1000;
-/** Short hidden session memory (messages) for the agent — not shown in Answer UI. */
-const SESSION_MEMORY_MESSAGES = 8;
-/** Keep memory compact so long RAG answers don't blow the context window. */
-const MEMORY_AI_MAX_CHARS = 1200;
 const ACTIVE_RUN_STATUSES = new Set(["pending", "running"]);
 
-function trimForMemory(
-  messages: Array<{ type: "human" | "ai"; content: string }>,
-): Array<{ type: "human" | "ai"; content: string }> {
-  return messages
-    .filter((m) => m.content.trim())
-    .map((m) =>
-      m.type === "ai" && m.content.length > MEMORY_AI_MAX_CHARS
-        ? { ...m, content: `${m.content.slice(0, MEMORY_AI_MAX_CHARS)}…` }
-        : m,
-    )
-    .slice(-SESSION_MEMORY_MESSAGES);
+const LOCATION_TRIGGERS = [
+  "where am i",
+  "my location",
+  "current location",
+  "live location",
+  "show live location",
+  "show my location",
+  "what's my location",
+  "what is my location",
+  "nearby",
+  "near me",
+  "around me",
+  "what's around me",
+  "what is around me",
+  "close to me",
+  "places near",
+  "find nearby",
+  "search nearby",
+];
+
+function isLocationQuery(text: string): boolean {
+  const lowered = text.toLowerCase();
+  return LOCATION_TRIGGERS.some((kw) => lowered.includes(kw));
+}
+
+function getBrowserLocation(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ lat: 0, lng: 0 });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat: 0, lng: 0 }),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  });
 }
 
 function nowIso() {
@@ -76,43 +95,16 @@ function makeLog(level: LogEntry["level"], message: string): LogEntry {
   };
 }
 
-function messageText(content: unknown): string {
-  if (typeof content === "string") return content.trim();
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part && typeof part === "object" && "text" in part) {
-          return String((part as { text?: string }).text ?? "");
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-  }
-  return content != null ? String(content).trim() : "";
-}
-
-/** Latest AI reply after the latest human turn — never falls back to old chat. */
-function extractLatestAnswer(state: AgentState | null): string {
+function extractAiText(state: AgentState | null): string {
   const messages = state?.messages ?? [];
-  let lastHuman = -1;
-  for (let i = 0; i < messages.length; i += 1) {
-    const type = (messages[i].type ?? "").toLowerCase();
-    if (type === "human" || type === "humanmessage" || type.includes("human")) {
-      lastHuman = i;
-    }
-  }
-  for (let i = messages.length - 1; i > lastHuman; i -= 1) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
     const msg = messages[i];
     const type = (msg.type ?? "").toLowerCase();
     if (type === "ai" || type === "aimessage" || type.includes("ai")) {
-      const text = messageText(msg.content);
-      if (text) return text;
+      if (typeof msg.content === "string" && msg.content.trim()) return msg.content;
     }
   }
-  return "";
+  return state?.task_plan_summary ?? "Agent completed.";
 }
 
 function hydrateFromSession() {
@@ -161,31 +153,15 @@ export function useAgentRun() {
   const [reconnected, setReconnected] = useState(hydrated.reconnected);
   const [steps, setSteps] = useState<StepState[]>(hydrated.steps);
   const [result, setResult] = useState<AgentState | null>(hydrated.result);
-  const [answer, setAnswer] = useState(() => extractLatestAnswer(hydrated.result));
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [threadId, setThreadId] = useState<string | null>(hydrated.threadId);
   const [runId, setRunId] = useState<string | null>(hydrated.runId);
   const [conversationMessages, setConversationMessages] = useState<
     Array<{ type: "human" | "ai"; content: string }>
-  >(() => loadSessionMemory());
+  >([]);
 
   stepsLiveRef.current = steps;
-
-  const persistMemory = useCallback(
-    (messages: Array<{ type: "human" | "ai"; content: string }>) => {
-      const trimmed = trimForMemory(messages);
-      setConversationMessages(trimmed);
-      saveSessionMemory(trimmed);
-    },
-    [],
-  );
-
-  const clearAnswer = useCallback(() => {
-    // Clear only what the user sees. Keep short session memory for the agent.
-    setAnswer("");
-    setError(null);
-  }, []);
 
   const persistSession = useCallback(
     (patch: {
@@ -253,12 +229,10 @@ export function useAgentRun() {
     threadIdRef.current = null;
     runIdRef.current = null;
     clearRunSession();
-    clearSessionMemory();
     setReconnected(false);
     setRunning(false);
     setSteps(initialStepStates());
     setResult(null);
-    setAnswer("");
     setError(null);
     setLogs([]);
     setThreadId(null);
@@ -291,22 +265,11 @@ export function useAgentRun() {
   );
 
   const finishRun = useCallback(
-    async (
-      activeThreadId: string | null,
-      activeRunId: string | null,
-      finalState?: AgentState,
-      options: { force?: boolean } = {},
-    ) => {
-      const aiText = finalState ? extractLatestAnswer(finalState) : "";
-      const stillActive =
-        Boolean(activeThreadId) && (await isRunStillActive(activeThreadId!, activeRunId));
-
-      // Answer already arrived but run status can lag — don't leave the UI stuck on Wait/Stop.
-      if (stillActive && !options.force && !aiText) {
+    async (activeThreadId: string | null, activeRunId: string | null, finalState?: AgentState) => {
+      if (activeThreadId && (await isRunStillActive(activeThreadId, activeRunId))) {
         persistSession({ threadId: activeThreadId, runId: activeRunId, running: true });
         return false;
       }
-
       trackingRef.current = false;
       stopPolling();
       setRunning(false);
@@ -322,23 +285,12 @@ export function useAgentRun() {
         );
         publishSteps(setSteps, finalized);
         setResult(finalState);
-        if (aiText) {
-          setAnswer(aiText);
-          setConversationMessages((prev) => {
-            const base =
-              prev.length && prev[prev.length - 1]?.type === "ai"
-                ? prev.slice(0, -1)
-                : prev;
-            const next = trimForMemory([
-              ...base,
-              { type: "ai" as const, content: aiText },
-            ]);
-            saveSessionMemory(next);
-            return next;
-          });
-        } else {
-          setAnswer("");
-        }
+        const aiText = extractAiText(finalState);
+        setConversationMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.type === "ai" && last.content === aiText) return prev;
+          return [...prev, { type: "ai", content: aiText }];
+        });
       }
 
       clearRunSession();
@@ -629,18 +581,16 @@ export function useAgentRun() {
                 initialState: state,
               });
               if (!streamDisconnected) {
-                const finished = await finishRun(activeThreadId, runIdRef.current, streamed);
-                if (finished) return;
-                pushLog("warn", "Run still active after stream — continuing via polling");
-              } else {
-                pushLog("warn", "Stream disconnected — continuing via polling");
+                await finishRun(activeThreadId, runIdRef.current, streamed);
+                return;
               }
+              pushLog("warn", "Stream disconnected — continuing via polling");
             } catch {
               pushLog("warn", "Stream rejoin unavailable — tracking via polling");
             }
           }
           const polled = await waitForRunViaPolling(activeThreadId, runIdRef.current, abort);
-          await finishRun(activeThreadId, runIdRef.current, polled ?? undefined, { force: true });
+          await finishRun(activeThreadId, runIdRef.current, polled ?? undefined);
           return;
         }
 
@@ -653,7 +603,7 @@ export function useAgentRun() {
         );
         publishSteps(setSteps, finalized);
         setResult(state);
-        await finishRun(activeThreadId, resolvedRunId, state, { force: true });
+        await finishRun(activeThreadId, resolvedRunId, state);
       } catch (err) {
         if (abort.signal.aborted) {
           pushLog("warn", "Run stopped");
@@ -699,23 +649,39 @@ export function useAgentRun() {
       setReconnected(false);
       setError(null);
       setResult(null);
-      setAnswer("");
       setLogs([]);
       publishSteps(setSteps, startPipeline(initialStepStates()));
 
       const currentUserMessage = { type: "human" as const, content: request.user_input.trim() };
-      // Keep short hidden memory for the agent; Answer UI still shows only the latest reply.
-      const memory = conversationMessages
-        .filter((m) => m.content.trim())
-        .slice(-(SESSION_MEMORY_MESSAGES - 1));
-      const conversation = trimForMemory([...memory, currentUserMessage]);
-      const finalRequest: RunRequest = {
+      let finalRequest: RunRequest = {
         ...request,
-        conversation_messages: conversation,
+        conversation_messages: [...conversationMessages, currentUserMessage],
       };
 
-      persistMemory(conversation);
-      pushLog("info", "Sending request to the document agent…");
+      if (isLocationQuery(request.user_input)) {
+        pushLog("info", "Detecting your location…");
+        try {
+          const coords = await getBrowserLocation();
+          if (coords.lat !== 0 || coords.lng !== 0) {
+            finalRequest = {
+              ...finalRequest,
+              user_latitude: coords.lat,
+              user_longitude: coords.lng,
+            };
+            pushLog(
+              "info",
+              `Location detected: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`,
+            );
+          } else {
+            pushLog("warn", "Location unavailable — sending without coordinates");
+          }
+        } catch {
+          pushLog("warn", "Could not detect location");
+        }
+      }
+
+      setConversationMessages((prev) => [...prev, currentUserMessage]);
+      pushLog("info", "Sending request to Andromeda…");
 
       const abort = new AbortController();
       abortRef.current = abort;
@@ -747,13 +713,9 @@ export function useAgentRun() {
 
         if (streamDisconnected || (await isRunStillActive(createdThreadId, runIdRef.current))) {
           const polled = await waitForRunViaPolling(createdThreadId, runIdRef.current, abort);
-          await finishRun(createdThreadId, runIdRef.current, polled ?? state, { force: true });
+          await finishRun(createdThreadId, runIdRef.current, polled ?? state);
         } else {
-          const finished = await finishRun(createdThreadId, runIdRef.current, state);
-          if (!finished) {
-            const polled = await waitForRunViaPolling(createdThreadId, runIdRef.current, abort);
-            await finishRun(createdThreadId, runIdRef.current, polled ?? state, { force: true });
-          }
+          await finishRun(createdThreadId, runIdRef.current, state);
         }
       } catch (err) {
         if (abort.signal.aborted) {
@@ -781,7 +743,6 @@ export function useAgentRun() {
     [
       conversationMessages,
       finishRun,
-      persistMemory,
       persistSession,
       processStream,
       pushLog,
@@ -823,7 +784,6 @@ export function useAgentRun() {
     reconnected,
     steps,
     result,
-    answer,
     error,
     logs,
     threadId,
@@ -832,6 +792,5 @@ export function useAgentRun() {
     run,
     cancel,
     reset,
-    clearAnswer,
   };
 }

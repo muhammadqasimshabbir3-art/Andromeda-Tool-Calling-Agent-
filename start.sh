@@ -1,5 +1,5 @@
 #!/bin/bash
-# Arabic Document Intelligence Agent — Quick Start
+# Andromeda Agent — Quick Start
 # Assumes setup is already done (./setup.sh). Loads .env and starts services.
 
 set -e
@@ -32,7 +32,7 @@ trap cleanup EXIT INT TERM
 
 echo -e "${BLUE}"
 echo "=================================================================="
-echo "    ARABIC DOCUMENT INTELLIGENCE - QUICK START"
+echo "              ANDROMEDA AGENT - QUICK START"
 echo "=================================================================="
 echo -e "${NC}"
 
@@ -76,7 +76,7 @@ ensure_frontend_deps() {
 run_ui() {
     stop_frontend
     ensure_frontend_deps
-    echo -e "${BLUE}Starting Document Intelligence Web UI (Vite)...${NC}"
+    echo -e "${BLUE}Starting Andromeda Web UI (Vite)...${NC}"
     echo -e "${YELLOW}Open: http://localhost:${FRONTEND_PORT}${NC}"
     echo -e "${YELLOW}Tip: run ./start.sh both to start LangGraph + UI together${NC}"
     echo -e "${YELLOW}Legacy Streamlit: ./start.sh streamlit → http://localhost:${STREAMLIT_PORT}${NC}"
@@ -102,7 +102,7 @@ run_server() {
 run_both() {
     stop_all_services
 
-    echo -e "${BLUE}Starting LangGraph Server + Document Intelligence UI...${NC}"
+    echo -e "${BLUE}Starting LangGraph Server + Andromeda Web UI...${NC}"
     echo ""
     echo -e "${YELLOW}API:    http://127.0.0.1:${LANGGRAPH_PORT}${NC}"
     echo -e "${YELLOW}UI:     http://localhost:${FRONTEND_PORT}${NC}"
@@ -119,7 +119,7 @@ run_both() {
     ensure_frontend_deps
     trap cleanup EXIT INT TERM
 
-    echo "Starting Document Intelligence Web UI..."
+    echo "Starting Andromeda Web UI..."
     (cd frontend && npm run dev -- --port "${FRONTEND_PORT}" --host 127.0.0.1)
 }
 
