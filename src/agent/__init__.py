@@ -1,4 +1,4 @@
-"""Andromeda Agent - Multi-tool LangGraph agent using ChatGroq."""
+"""Arabic Document Intelligence Agent — LangGraph entrypoint."""
 
 from .graph import GRAPH_RUN_CONFIG, graph
 

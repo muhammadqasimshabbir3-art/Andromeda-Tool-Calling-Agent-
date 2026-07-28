@@ -1,12 +1,4 @@
-import {
-  Activity,
-  FileText,
-  MapPin,
-  Orbit,
-  Radio,
-  Sparkles,
-  Wrench,
-} from "lucide-react";
+import { Radio, ScanText } from "lucide-react";
 import type { ServerStatus } from "../hooks/useServerHealth";
 
 interface AgentHeaderProps {
@@ -14,58 +6,77 @@ interface AgentHeaderProps {
   latencyMs: number | null;
   apiUrl: string;
   running: boolean;
+  isScanning: boolean;
+  uiLang: "ar" | "en";
+  onUiLangChange: (lang: "ar" | "en") => void;
 }
 
-export function AgentHeader({ serverStatus, latencyMs, apiUrl, running }: AgentHeaderProps) {
+export function AgentHeader({
+  serverStatus,
+  latencyMs,
+  running,
+  isScanning,
+  uiLang,
+  onUiLangChange,
+}: AgentHeaderProps) {
+  const isAr = uiLang === "ar";
+
   return (
-    <header className="agent-header">
-      <div className="brand">
-        <div className="brand-icon">
-          <Orbit size={24} />
-        </div>
-        <div>
-          <h1>Andromeda</h1>
-          <p>Multi-tool LangGraph assistant for math, search, PDF, store SQL, business RAG, location, and Gmail</p>
-        </div>
-      </div>
-
-      <div className="header-status">
-        <div className={`status-pill ${serverStatus}`}>
-          <Radio size={14} />
-          <span>
-            LangGraph{" "}
-            {serverStatus === "online"
-              ? "connected"
-              : serverStatus === "offline"
-                ? "offline"
-                : "…"}
+    <header className="site-header">
+      <div className="topbar">
+        <div className="topbar-brand">
+          <span className="brand-mark" aria-hidden>
+            🐪
           </span>
-          {latencyMs != null && <span className="muted">· {latencyMs}ms</span>}
-        </div>
-        {running && (
-          <div className="status-pill running">
-            <Activity size={14} className="spin" />
-            <span>Agent running</span>
+          <div className="topbar-titles">
+            <strong className="brand-name">{isAr ? "وثيقة بصيرة" : "Wathiqa Basira"}</strong>
+            <span className="brand-product">
+              {isAr ? "ذكاء المستندات العربية" : "Arabic Document Intelligence"}
+            </span>
           </div>
-        )}
-        <div className="status-pill neutral">
-          <span className="mono truncate">{apiUrl}</span>
         </div>
-      </div>
 
-      <div className="header-badges">
-        <span className="badge">
-          <Sparkles size={12} /> Multi-step routing
-        </span>
-        <span className="badge">
-          <Wrench size={12} /> Tool orchestration
-        </span>
-        <span className="badge">
-          <FileText size={12} /> PDF analysis
-        </span>
-        <span className="badge">
-          <MapPin size={12} /> Live location
-        </span>
+        <div className="topbar-actions">
+          <div className={`status-pill ${serverStatus}`}>
+            <Radio size={14} />
+            <span>
+              {serverStatus === "online"
+                ? isAr
+                  ? "جاهز"
+                  : "Ready"
+                : serverStatus === "offline"
+                  ? isAr
+                    ? "غير متصل"
+                    : "Offline"
+                  : isAr
+                    ? "…"
+                    : "…"}
+              {serverStatus === "online" && latencyMs != null ? ` · ${latencyMs}ms` : ""}
+            </span>
+          </div>
+          {running && (
+            <div className="status-pill running">
+              <ScanText size={14} />
+              <span>{isScanning ? (isAr ? "جاري المسح…" : "Scanning…") : isAr ? "يعمل…" : "Working…"}</span>
+            </div>
+          )}
+          <div className="lang-toggle" role="group" aria-label={isAr ? "لغة الواجهة" : "UI language"}>
+            <button
+              type="button"
+              className={uiLang === "ar" ? "active" : ""}
+              onClick={() => onUiLangChange("ar")}
+            >
+              ع
+            </button>
+            <button
+              type="button"
+              className={uiLang === "en" ? "active" : ""}
+              onClick={() => onUiLangChange("en")}
+            >
+              EN
+            </button>
+          </div>
+        </div>
       </div>
     </header>
   );

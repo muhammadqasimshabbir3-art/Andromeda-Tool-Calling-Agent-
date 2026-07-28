@@ -59,16 +59,27 @@ export async function checkAgentHealth(): Promise<{ ok: boolean; latencyMs: numb
 }
 
 export function buildAgentInput(request: RunRequest) {
+  const payload =
+    request.document_data_base64 ||
+    (request.pdf_analysis_enabled ? request.pdf_data_base64 : "") ||
+    request.pdf_data_base64 ||
+    "";
+  const filename =
+    request.document_filename || request.pdf_filename || "uploaded.pdf";
+  const summarize = Boolean(request.summarize_only || request.pdf_summarize_only);
+
   return {
     user_input: request.user_input.trim(),
-    web_search_enabled: request.web_search_enabled,
-    user_latitude: request.user_latitude ?? 0,
-    user_longitude: request.user_longitude ?? 0,
-    ...(request.pdf_analysis_enabled && request.pdf_data_base64
+    response_language: request.response_language === "en" ? "en" : "ar",
+    ...(payload
       ? {
-          pdf_data_base64: request.pdf_data_base64,
-          pdf_filename: request.pdf_filename || "uploaded.pdf",
-          pdf_summarize_only: Boolean(request.pdf_summarize_only),
+          pdf_data_base64: payload,
+          pdf_filename: filename,
+          pdf_summarize_only: summarize,
+          document_data_base64: payload,
+          document_filename: filename,
+          document_mime_type: request.document_mime_type || "",
+          summarize_only: summarize,
         }
       : {}),
     messages: request.conversation_messages ?? [],

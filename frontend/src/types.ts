@@ -20,22 +20,20 @@ export interface StepState {
 export interface AgentState {
   task_plan_summary?: string;
   agent_route?: string;
-  db_guard_blocked?: boolean;
-  db_guard_detail?: string;
-  db_guard_layer?: string;
+  detected_language?: string;
+  document_fingerprint?: string;
+  indexed_chunk_count?: number;
   messages?: Array<{
     content?: unknown;
     type?: string;
     tool_calls?: Array<{ name?: string; args?: unknown }>;
   }>;
   user_input?: string;
-  web_search_enabled?: boolean;
-  user_latitude?: number;
-  user_longitude?: number;
   pdf_filename?: string;
   pdf_summarize_only?: boolean;
-  generated_pdf_path?: string;
-  generated_pdf_filename?: string;
+  document_filename?: string;
+  document_mime_type?: string;
+  summarize_only?: boolean;
 }
 
 export interface LogEntry {
@@ -47,13 +45,16 @@ export interface LogEntry {
 
 export interface RunRequest {
   user_input: string;
-  web_search_enabled: boolean;
-  user_latitude: number;
-  user_longitude: number;
   pdf_analysis_enabled?: boolean;
   pdf_data_base64?: string;
   pdf_filename?: string;
   pdf_summarize_only?: boolean;
+  document_data_base64?: string;
+  document_filename?: string;
+  document_mime_type?: string;
+  summarize_only?: boolean;
+  /** Preferred answer language — independent of document / UI language. */
+  response_language?: "ar" | "en";
   conversation_messages?: Array<{ type: "human" | "ai"; content: string }>;
 }
 

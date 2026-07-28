@@ -2,19 +2,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import { serveReportsPlugin } from "./vite.reportsPlugin";
 
 /**
- * Andromeda Agent – Vite config
+ * Arabic Document Intelligence – Vite config
  *
  * Local dev:
  *   VITE_LANGGRAPH_API_URL=http://127.0.0.1:2024  (root .env, loaded via envDir)
- *   Leave blank → Vite dev-server proxies /api → LangGraph on LANGGRAPH_PORT
- *   Generated PDFs: /generated-reports/<name>.pdf → ../reports/
+ *   Leave blank → Vite proxies /api → LangGraph on LANGGRAPH_PORT
  */
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const reportsDir = path.join(rootDir, "reports");
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, rootDir, "");
@@ -23,10 +20,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir: rootDir,
-    plugins: [react(), serveReportsPlugin(reportsDir)],
+    plugins: [react()],
     server: {
       port: frontendPort,
       strictPort: true,
+      watch: {
+        usePolling: true,
+        interval: 1000,
+        ignored: ["**/node_modules/**", "**/.git/**", "**/dist/**"],
+      },
       fs: {
         allow: [rootDir],
       },

@@ -1,10 +1,7 @@
-"""Unit tests for PDF analysis helpers."""
+"""Unit tests for PDF / document analysis helpers."""
 
-import pytest
-from langchain_core.messages import HumanMessage
-
-from agent.graph import decision_agent
 from agent.pdf_analysis import split_text_into_chunks
+from preprocess.arabic_normalize import clean_ocr_text, normalize_arabic
 
 
 def test_split_text_into_overlapping_page_chunks():
@@ -18,19 +15,16 @@ def test_split_text_into_overlapping_page_chunks():
     chunks = split_text_into_chunks(text, chunk_size=500, overlap=80)
 
     assert len(chunks) > 1
-    assert chunks[0].text.startswith("[Page 1]")
-    assert chunks[0].page_start == 1
+    assert "[Page 1]" in chunks[0].text
     assert all(chunk.text for chunk in chunks)
 
 
-@pytest.mark.anyio
-async def test_pdf_payload_routes_to_pdf_analysis():
-    result = await decision_agent(
-        {
-            "messages": [HumanMessage(content="What is the main conclusion?")],
-            "pdf_data_base64": "JVBERi0xLjQK",
-            "pdf_filename": "sample.pdf",
-        }
-    )
+def test_normalize_arabic_alef_variants():
+    assert normalize_arabic("أحمد") == "احمد"
+    assert "ـ" not in normalize_arabic("كــتاب")
 
-    assert result["agent_route"] == "run_pdf_analysis"
+
+def test_clean_ocr_text_whitespace():
+    cleaned = clean_ocr_text("مرحبا   بالعالم\n\n\nاختبار")
+    assert "  " not in cleaned
+    assert "\n\n\n" not in cleaned

@@ -1,7 +1,7 @@
 {
-  "name": "andromeda-tool-calling-agent-ui",
+  "name": "wathiqa-ui",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "node": ">=20"

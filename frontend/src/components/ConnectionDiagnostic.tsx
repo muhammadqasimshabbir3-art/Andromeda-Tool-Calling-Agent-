@@ -10,11 +10,21 @@ interface DiagStep {
 }
 
 /** Runs 3 sequential checks and shows exactly where the connection breaks. */
-export function ConnectionDiagnostic({ run }: { run: boolean }) {
+export function ConnectionDiagnostic({
+  run,
+  uiLang = "en",
+}: {
+  run: boolean;
+  uiLang?: "ar" | "en";
+}) {
+  const isAr = uiLang === "ar";
   const [steps, setSteps] = useState<DiagStep[]>([
-    { label: "Env vars set", status: "pending" },
+    { label: isAr ? "متغيرات البيئة" : "Env vars set", status: "pending" },
     { label: `GET ${healthCheckUrl()}`, status: "pending" },
-    { label: "POST /threads (auth check)", status: "pending" },
+    {
+      label: isAr ? "POST /threads (تحقق المصادقة)" : "POST /threads (auth check)",
+      status: "pending",
+    },
   ]);
 
   useEffect(() => {
@@ -114,7 +124,9 @@ export function ConnectionDiagnostic({ run }: { run: boolean }) {
 
   return (
     <section className="panel" style={{ marginTop: "1rem" }}>
-      <div className="panel-title">Connection diagnostic</div>
+      <div className="panel-title">
+        {isAr ? "تشخيص الاتصال" : "Connection diagnostic"}
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px 0" }}>
         {steps.map((s, i) => (
           <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
@@ -137,8 +149,18 @@ export function ConnectionDiagnostic({ run }: { run: boolean }) {
       </div>
       <div className="deploy-note" style={{ marginTop: "8px" }}>
         <AlertTriangle size={12} style={{ display: "inline", marginRight: "4px" }} />
-        If step 2 fails with CORS: set <code>CORS_ALLOW_ORIGINS</code> to include your UI origin
-        (e.g. <code>http://localhost:8501</code>, <code>http://localhost:5173</code>, or your Vercel URL).
+        {isAr ? (
+          <>
+            إذا فشل الخطوة ٢ بسبب CORS: عيّن <code>CORS_ALLOW_ORIGINS</code> ليشمل أصل الواجهة
+            (مثل <code>http://localhost:5173</code>).
+          </>
+        ) : (
+          <>
+            If step 2 fails with CORS: set <code>CORS_ALLOW_ORIGINS</code> to include your UI origin
+            (e.g. <code>http://localhost:8501</code>, <code>http://localhost:5173</code>, or your
+            Vercel URL).
+          </>
+        )}
       </div>
     </section>
   );

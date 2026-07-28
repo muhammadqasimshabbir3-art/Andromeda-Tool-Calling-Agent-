@@ -1,6 +1,6 @@
 #!/bin/bash
-# Andromeda Agent Setup & Run Script
-# This script sets up the project and runs the LangGraph server and other services
+# Arabic Document Intelligence Agent — Setup & Run
+# Sets up the project and runs the LangGraph server and UI services.
 
 set -e
 
@@ -20,7 +20,7 @@ source "${SCRIPT_DIR}/scripts/services.sh"
 # Banner (ASCII for terminal compatibility)
 echo -e "${BLUE}"
 echo "=================================================================="
-echo "              ANDROMEDA AGENT - SETUP & RUN"
+echo "       ARABIC DOCUMENT INTELLIGENCE - SETUP"
 echo "=================================================================="
 echo -e "${NC}"
 
@@ -119,14 +119,17 @@ echo -e "${YELLOW}Step 5: Verifying setup...${NC}"
 uv run python -c "
 import sys
 try:
-    from langchain_groq import ChatGroq
     from agent import graph
-    from agent.custom_tools.calculator_tools import casio_calculator
-    from agent.custom_tools.email_tools import send_email
-    from agent.custom_tools.web_search_tools import web_search
-    from agent.custom_tools.file_search_tools import search_files
-    from agent.custom_tools.pdf_generator import generate_pdf_report
+    from config.settings import get_settings
+    from loaders import load_document
+    from ocr import get_ocr_engine
+    from embeddings import embed_query
+    from chunking import get_chunker
+    from vectorstore import get_vector_store
+    assert graph is not None
+    assert get_settings().embedding_model_id
     print('All imports successful')
+    print(f'Graph nodes: {sorted(n for n in graph.nodes if not n.startswith(\"__\"))}')
     sys.exit(0)
 except Exception as e:
     print(f'Import failed: {e}')

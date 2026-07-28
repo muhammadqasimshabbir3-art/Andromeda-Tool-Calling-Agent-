@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Download BAAI/bge-small-en-v1.5 into models/ for local semantic search.
+"""Download the configured embedding model into models/ for local semantic search.
+
+Default: BAAI/bge-m3 (multilingual Arabic + English).
 
 Usage (from repo root):
     python scripts/download_embedding_model.py
@@ -27,12 +29,11 @@ def main() -> int:
     else:
         dim_count = model.get_sentence_embedding_dimension()
     probe = model.encode(
-        "Represent this sentence for searching relevant passages: return policy",
+        "ما هي سياسة الاسترجاع؟",
         normalize_embeddings=True,
     )
     print(f"Ready. dimensions={dim_count}, probe_len={len(probe)}")
-    print("Re-seed business RAG so Neon chunks use the new vectors:")
-    print("  python scripts/seed_business_rag.py")
+    print("OCR model downloads automatically on first scanned-document ingest.")
     return 0
 
 
